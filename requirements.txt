@@ -71,7 +71,6 @@ kiwisolver==1.4.4
 kmodes==0.12.2
 langcodes==3.3.0
 libclang==18.1.1
-lxml==4.9.2
 Markdown==3.8
 markdown-it-py==3.0.0
 MarkupSafe==2.0.1
