@@ -26,7 +26,6 @@ confection==0.1.4
 contourpy==1.0.7
 cycler==0.11.0
 cymem==2.0.8
-d3graph==2.5.0
 datazets==0.1.9
 debugpy==1.6.6
 decorator==5.1.1
