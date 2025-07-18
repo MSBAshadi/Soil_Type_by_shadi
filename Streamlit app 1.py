@@ -13,7 +13,7 @@ st.title("🌱 Soil Type Classifier using MobileNetV2")
 # --- Load Model ---
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model("C:\\Users\\abdal\\OneDrive\\المستندات\\Desktop\\PHD\\Thesis\\first paper work\\soil_classifier_mobilenetv2.h5")
+    model = tf.keras.models.load_model("soil_classifier_mobilenetv2.h5")
     return model
 
 model = load_model()
