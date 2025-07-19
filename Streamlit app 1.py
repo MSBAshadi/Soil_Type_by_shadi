@@ -19,7 +19,7 @@ def load_model():
 model = load_model()
 
 # --- Define Class Labels ---
-class_names = ['Alluvial Soil', 'Black Soil', 'Red Soil', 'Sandy Soil']  # Adjust if needed
+class_names = ['Sandy loam', 'Clayey soil', 'Loamy soil', 'Sandy soil']  
 
 # --- Preprocess Uploaded Image ---
 def preprocess_image(image):
