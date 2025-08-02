@@ -12,19 +12,19 @@ st.title("🌱 Crop Recommendation by Soil Type ")
 # --- Load Model & Encoders ---
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("C:\\Users\\abdal\\OneDrive\\المستندات\\Desktop\\PHD\\Thesis\\first paper work\\soil_multimodal_model.h5")
+    return tf.keras.models.load_model("soil_multimodal_model.h5")
 
 @st.cache_resource
 def load_scaler():
-    return joblib.load("C:\\Users\\abdal\\OneDrive\\المستندات\\Desktop\\PHD\\Thesis\\first paper work\\scaler.pkl")
+    return joblib.load("scaler.pkl")
 
 @st.cache_resource
 def load_label_encoder():
-    return joblib.load("C:\\Users\\abdal\\OneDrive\\المستندات\\Desktop\\PHD\\Thesis\\first paper work\\label_encoder.pkl")
+    return joblib.load("label_encoder.pkl")
 
 @st.cache_data
 def load_crop_data():
-    return pd.read_csv("C:\\Users\\abdal\\OneDrive\\المستندات\\Desktop\\PHD\\Thesis\\first paper work\\Crop_recommendation_with_soil_type.csv")
+    return pd.read_csv("Crop_recommendation_with_soil_type.csv")
 
 model = load_model()
 scaler = load_scaler()
@@ -81,3 +81,4 @@ if uploaded_file is not None:
                 st.markdown(f"- {crop}")
         else:
             st.warning("⚠️ No crop recommendations available for this soil type.")
+
