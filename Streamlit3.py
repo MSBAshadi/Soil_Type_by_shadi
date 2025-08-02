@@ -48,13 +48,6 @@ def preprocess_tabular(ph, n, p, k, humidity):
 # --- Input Interface ---
 uploaded_file = st.file_uploader("📷 Upload a soil image", type=["jpg", "jpeg", "png"])
 
-st.markdown("### 📊 Enter Tabular Features")
-ph = st.number_input("pH", min_value=0.0, max_value=14.0, step=0.1)
-n = st.number_input("Nitrogen (N)", min_value=0.0, step=1.0)
-p = st.number_input("Phosphorus (P)", min_value=0.0, step=1.0)
-k = st.number_input("Potassium (K)", min_value=0.0, step=1.0)
-humidity = st.number_input("Humidity (%)", min_value=0.0, max_value=100.0, step=0.1)
-
 # --- Prediction ---
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert('RGB')
@@ -81,4 +74,5 @@ if uploaded_file is not None:
                 st.markdown(f"- {crop}")
         else:
             st.warning("⚠️ No crop recommendations available for this soil type.")
+
 
