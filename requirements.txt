@@ -30,6 +30,7 @@ datazets==0.1.9
 debugpy==1.6.6
 decorator==5.1.1
 distro==1.8.0
+dill
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl#sha256=86cc141f63942d4b2c5fcee06630fd6f904788d2f0ab005cce45aadb8fb73889
 et_xmlfile==2.0.0
 executing==1.2.0
@@ -186,3 +187,4 @@ wrapt==1.17.2
 xgboost==2.0.3
 XlsxWriter==3.2.3
 zipp==3.16.2
+
