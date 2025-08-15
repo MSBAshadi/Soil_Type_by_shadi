@@ -188,5 +188,6 @@ xgboost==2.0.3
 XlsxWriter==3.2.3
 zipp==3.16.2
 streamlit_folium==0.25.1
-openai==1.99.9
+
+
 
