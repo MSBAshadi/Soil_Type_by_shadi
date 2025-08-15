@@ -13,7 +13,7 @@ import os
 st.set_page_config(page_title="Soil Type & AI Crop Recommendation", layout="centered")
 st.title("🌱 Soil Type, Crop Recommendation & Location Info")
 
-api_key = st.secrets["OPENAI_API_KEY"]
+api_key = st.secrets["OPENAI_API_KEY"].strip()
 client = OpenAI(api_key=api_key)
 # -------------------- LOAD MODEL & LABEL ENCODER --------------------
 @st.cache_resource
@@ -113,6 +113,7 @@ if uploaded_file is not None and country is not None:
 
         st.markdown("🌾 **AI Recommended Crops:**")
         st.markdown(ai_recommendations)
+
 
 
 
