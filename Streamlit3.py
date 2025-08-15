@@ -8,15 +8,13 @@ import folium
 from geopy.geocoders import Nominatim
 import requests
 from openai import OpenAI
-
+import os
 # -------------------- CONFIG --------------------
 st.set_page_config(page_title="Soil Type & AI Crop Recommendation", layout="centered")
 st.title("🌱 Soil Type, Crop Recommendation & Location Info")
 
-# Set your OpenAI API key
-OPENAI_API_KEY = "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"  # <-- Replace with your key
-client = OpenAI(api_key=OPENAI_API_KEY)
-
+api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=api_key)
 # -------------------- LOAD MODEL & LABEL ENCODER --------------------
 @st.cache_resource
 def load_model():
@@ -115,5 +113,6 @@ if uploaded_file is not None and country is not None:
 
         st.markdown("🌾 **AI Recommended Crops:**")
         st.markdown(ai_recommendations)
+
 
 
