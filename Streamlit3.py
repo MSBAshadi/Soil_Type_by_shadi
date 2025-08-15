@@ -1,37 +1,35 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-import pandas as pd
 import joblib
 from PIL import Image
+from streamlit_folium import st_folium
+import folium
+from geopy.geocoders import Nominatim
+import requests
+from openai import OpenAI
 
-# --- Page Configuration ---
-st.set_page_config(page_title="Crop Recommendation System", layout="centered")
-st.title("🌱 Crop Recommendation by Soil Type ")
+# -------------------- CONFIG --------------------
+st.set_page_config(page_title="Soil Type & AI Crop Recommendation", layout="centered")
+st.title("🌱 Soil Type, Crop Recommendation & Location Info")
 
-# --- Load Model & Encoders ---
+# Set your OpenAI API key
+OPENAI_API_KEY = "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"  # <-- Replace with your key
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# -------------------- LOAD MODEL & LABEL ENCODER --------------------
 @st.cache_resource
 def load_model():
     return tf.keras.models.load_model("soil_multimodal_model.h5")
 
 @st.cache_resource
-def load_scaler():
-    return joblib.load("scaler.pkl")
-
-@st.cache_resource
 def load_label_encoder():
     return joblib.load("label_encoder.pkl")
 
-@st.cache_data
-def load_crop_data():
-    return pd.read_csv("Crop_recommendation_with_soil_type.csv")
-
 model = load_model()
-scaler = load_scaler()
 label_encoder = load_label_encoder()
-crop_df = load_crop_data()
 
-# --- Image Preprocessing ---
+# -------------------- IMAGE PREPROCESSING --------------------
 def preprocess_image(image):
     img = image.resize((224, 224))
     img_array = tf.keras.preprocessing.image.img_to_array(img)
@@ -39,40 +37,83 @@ def preprocess_image(image):
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
-# --- Tabular Preprocessing ---
-def preprocess_tabular(ph, n, p, k, humidity):
-    features = np.array([[ph, n, p, k, humidity]])
-    scaled = scaler.transform(features)
-    return scaled
+# -------------------- STEP 1: MAP CLICK --------------------
+st.subheader("📍 Select Location on Map")
+m = folium.Map(location=[20, 0], zoom_start=2)
+m.add_child(folium.LatLngPopup())
+st.write("Click anywhere on the map to get country and elevation:")
+output = st_folium(m, width=700, height=500)
 
-# --- Input Interface ---
-uploaded_file = st.file_uploader("📷 Upload a soil image", type=["jpg", "jpeg", "png"])
+country = None
+elevation = None
+if output and output["last_clicked"]:
+    lat = output["last_clicked"]["lat"]
+    lon = output["last_clicked"]["lng"]
+    st.write(f"**Selected Coordinates:** {lat:.4f}, {lon:.4f}")
 
-# --- Prediction ---
-if uploaded_file is not None:
+    geolocator = Nominatim(user_agent="streamlit-app")
+    location = geolocator.reverse((lat, lon), language="en")
+    country = location.raw['address'].get('country', 'Unknown')
+    st.write(f"**Country:** {country}")
+
+    elev_api = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
+    response = requests.get(elev_api)
+    if response.status_code == 200:
+        elevation = response.json()["results"][0]["elevation"]
+        st.write(f"**Elevation:** {elevation} meters")
+    else:
+        st.write("⚠️ Could not retrieve elevation.")
+
+# -------------------- STEP 2: IMAGE UPLOAD --------------------
+st.markdown("### 📷 Upload Soil Image")
+uploaded_file = st.file_uploader("Upload a soil image", type=["jpg", "jpeg", "png"])
+
+# -------------------- STEP 3: PREDICT & AI RECOMMENDATION --------------------
+if uploaded_file is not None and country is not None:
     image = Image.open(uploaded_file).convert('RGB')
     st.image(image, caption='Uploaded Image', use_column_width=True)
 
-    if st.button("🧠 Predict Soil Type"):
-        with st.spinner("Classifying..."):
+    if st.button("🧠 Predict Soil Type & Get AI Crop Recommendations"):
+        with st.spinner("Classifying soil type..."):
             img_input = preprocess_image(image)
-            tab_input = preprocess_tabular(ph, n, p, k, humidity)
 
-            prediction = model.predict([img_input, tab_input])
+            # Dummy tabular features (ph, N, P, K, humidity = 5 features)
+            dummy_tabular = np.zeros((1, 5))
+
+            prediction = model.predict([img_input, dummy_tabular])
             predicted_class = label_encoder.inverse_transform([np.argmax(prediction)])[0]
             confidence = np.max(prediction) * 100
 
         st.success(f"🌍 **Predicted Soil Type:** `{predicted_class}`")
         st.info(f"🔍 Confidence: **{confidence:.2f}%**")
+        st.write(f"📌 Country: **{country}**")
+        if elevation is not None:
+            st.write(f"📌 Elevation: **{elevation} meters**")
 
-        # --- Crop Recommendation from CSV ---
-        recommended_crops = crop_df[crop_df['soil type'].str.lower().str.strip() == predicted_class.lower().strip()]['label'].unique()
+        # -------------------- OPENAI RECOMMENDATION --------------------
+        with st.spinner("Asking AI for crop recommendations..."):
+            prompt = (
+                f"You are an agricultural expert. Based on the following details:\n"
+                f"- Country: {country}\n"
+                f"- Elevation: {elevation} meters\n"
+                f"- Soil Type: {predicted_class}\n\n"
+                f"Suggest the most suitable crops to grow in this location. "
+                f"List them in bullet points with short reasons."
+            )
 
-        if len(recommended_crops) > 0:
-            st.markdown("🌾 **Recommended Crops:**")
-            for crop in recommended_crops:
-                st.markdown(f"- {crop}")
-        else:
-            st.warning("⚠️ No crop recommendations available for this soil type.")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful agricultural assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5,
+                max_tokens=300
+            )
+
+            ai_recommendations = response.choices[0].message.content
+
+        st.markdown("🌾 **AI Recommended Crops:**")
+        st.markdown(ai_recommendations)
 
 
