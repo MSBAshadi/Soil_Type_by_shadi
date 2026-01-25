@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import tensorflow as tf
 import numpy as np
 import joblib
@@ -8,6 +8,7 @@ import folium
 from geopy.geocoders import Nominatim
 import requests
 from openai import OpenAI
+from streamlit_js_eval import streamlit_js_eval
 import os
 # -------------------- CONFIG --------------------
 st.set_page_config(page_title="Soil Type & AI Crop Recommendation", layout="centered")
@@ -15,15 +16,19 @@ st.title("🌱 Soil Type, Crop Recommendation & Location Info")
 
 api_key = st.secrets["OPENAI_API_KEY"].strip()
 client = OpenAI(api_key=api_key)
+
 # -------------------- LOAD MODEL & LABEL ENCODER --------------------
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("soil_multimodal_model.h5")
+    return tf.keras.models.load_model(
+        r"soil_multimodal_model.h5"
+    )
 
 @st.cache_resource
 def load_label_encoder():
-    return joblib.load("label_encoder.pkl")
-
+    return joblib.load(
+        r"label_encoder.pkl"
+    )
 model = load_model()
 label_encoder = load_label_encoder()
 
@@ -35,84 +40,159 @@ def preprocess_image(image):
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
-# -------------------- STEP 1: MAP CLICK --------------------
-st.subheader("📍 Select Location on Map")
-m = folium.Map(location=[20, 0], zoom_start=2)
-m.add_child(folium.LatLngPopup())
-st.write("Click anywhere on the map to get country and elevation:")
-output = st_folium(m, width=700, height=500)
+# -------------------- NAVIGATION STATE --------------------
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Location"
+if "uploaded_file" not in st.session_state:
+    st.session_state.uploaded_file = None
+if "image" not in st.session_state:
+    st.session_state.image = None
+if "country" not in st.session_state:
+    st.session_state.country = None
+if "latlon" not in st.session_state:
+    st.session_state.latlon = (None, None)
+if "elevation" not in st.session_state:
+    st.session_state.elevation = None
+if "selected_month" not in st.session_state:
+    st.session_state.selected_month = "January"
 
-country = None
-elevation = None
-if output and output["last_clicked"]:
-    lat = output["last_clicked"]["lat"]
-    lon = output["last_clicked"]["lng"]
-    st.write(f"**Selected Coordinates:** {lat:.4f}, {lon:.4f}")
+def go_to(tab):
+    st.session_state.active_tab = tab
 
-    geolocator = Nominatim(user_agent="streamlit-app")
-    location = geolocator.reverse((lat, lon), language="en")
-    country = location.raw['address'].get('country', 'Unknown')
-    st.write(f"**Country:** {country}")
+# -------------------- LOCATION STEP --------------------
+if st.session_state.active_tab == "Location":
+    st.header("📍 Step 1: Select Location")
 
-    elev_api = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
-    response = requests.get(elev_api)
-    if response.status_code == 200:
-        elevation = response.json()["results"][0]["elevation"]
-        st.write(f"**Elevation:** {elevation} meters")
+    col1, col2 = st.columns(2)
+    lat, lon = None, None
+
+    with col1:
+        st.write("🌍 Click on the map to select a location")
+        m = folium.Map(location=[20, 0], zoom_start=2)
+        m.add_child(folium.LatLngPopup())
+        output = st_folium(m, width=600, height=400)
+        if output and output["last_clicked"]:
+            lat = output["last_clicked"]["lat"]
+            lon = output["last_clicked"]["lng"]
+
+    with col2:
+        st.write("📱 Or use your current location")
+        if st.button("Use My Location"):
+            coords = streamlit_js_eval(
+                js_expressions="""
+                new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            resolve({lat: pos.coords.latitude, lon: pos.coords.longitude});
+                        },
+                        (err) => {
+                            reject(err.message);
+                        }
+                    );
+                })
+                """,
+                key="get_location"
+            )
+            if coords and "lat" in coords and "lon" in coords:
+                lat, lon = coords["lat"], coords["lon"]
+
+    if lat and lon:
+        try:
+            geolocator = Nominatim(user_agent="streamlit-app")
+            location = geolocator.reverse((lat, lon), language="en")
+            st.session_state.country = location.raw['address'].get('country', 'Unknown')
+        except:
+            st.session_state.country = "Unknown"
+
+        try:
+            elev_api = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
+            response = requests.get(elev_api)
+            if response.status_code == 200:
+                st.session_state.elevation = response.json()["results"][0]["elevation"]
+        except:
+            st.session_state.elevation = None
+
+        st.session_state.latlon = (lat, lon)
+
+        st.success(f"📍 Location saved: {lat:.4f}, {lon:.4f} — {st.session_state.country}")
+
+    months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    st.session_state.selected_month = st.selectbox("📅 Planting Month", months)
+
+    if st.session_state.country:
+        if st.button("➡️ Next: Upload Soil Image"):
+            go_to("Soil Image")
+
+# -------------------- IMAGE STEP --------------------
+elif st.session_state.active_tab == "Soil Image":
+    st.header("📷 Step 2: Upload Soil Image")
+    uploaded_file = st.file_uploader("Upload a soil image", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        st.session_state.uploaded_file = uploaded_file
+        st.session_state.image = Image.open(uploaded_file).convert('RGB')
+        st.image(st.session_state.image, caption="Uploaded Soil Image", use_column_width=True)
+
+    col1, col2 = st.columns([1,1])
+    if col1.button("⬅️ Back"):
+        go_to("Location")
+    if col2.button("➡️ Next: Prediction") and st.session_state.image is not None:
+        go_to("Prediction")
+
+# -------------------- PREDICTION STEP --------------------
+elif st.session_state.active_tab == "Prediction":
+    st.header("🧠 Step 3: Soil Prediction & Crop Recommendations")
+
+    if st.session_state.image is not None and st.session_state.country is not None:
+        if st.button("🔎 Predict & Recommend"):
+            with st.spinner("Classifying soil type..."):
+                img_input = preprocess_image(st.session_state.image)
+                dummy_tabular = np.zeros((1, 5))
+                prediction = model.predict([img_input, dummy_tabular])
+                predicted_class = label_encoder.inverse_transform([np.argmax(prediction)])[0]
+                confidence = np.max(prediction) * 100
+
+            col1, col2 = st.columns(2)
+            col1.metric("🌍 Soil Type", predicted_class)
+            
+
+            with st.spinner("Getting AI crop recommendations..."):
+                prompt = (
+                    f"You are an agricultural expert. Based on the following details:\n"
+                    f"- Country: {st.session_state.country}\n"
+                    f"- Elevation: {st.session_state.elevation} meters\n"
+                    f"- Soil Type: {predicted_class}\n"
+                    f"- Planting Month: {st.session_state.selected_month}\n\n"
+                    f"Suggest the most suitable crops to grow in this location during that month. "
+                    f"List them in bullet points with short reasons."
+                )
+
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful agricultural assistant."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.5,
+                    max_tokens=300
+                )
+                ai_recommendations = response.choices[0].message.content
+
+            st.markdown("### 🌾 Recommended Crops")
+            st.markdown(
+                f"<div style='padding:15px; background:#FFF3E0; border-radius:12px; "
+                f"border:1px solid #FFB74D;'>{ai_recommendations}</div>",
+                unsafe_allow_html=True
+            )
     else:
-        st.write("⚠️ Could not retrieve elevation.")
+        st.warning("⚠️ Please complete previous steps first.")
 
-# -------------------- STEP 2: IMAGE UPLOAD --------------------
-st.markdown("### 📷 Upload Soil Image")
-uploaded_file = st.file_uploader("Upload a soil image", type=["jpg", "jpeg", "png"])
+    if st.button("⬅️ Back"):
+        go_to("Soil Image")
 
-# -------------------- STEP 3: PREDICT & AI RECOMMENDATION --------------------
-if uploaded_file is not None and country is not None:
-    image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption='Uploaded Image', use_column_width=True)
 
-    if st.button("🧠 Predict Soil Type & Get AI Crop Recommendations"):
-        with st.spinner("Classifying soil type..."):
-            img_input = preprocess_image(image)
-
-            # Dummy tabular features (ph, N, P, K, humidity = 5 features)
-            dummy_tabular = np.zeros((1, 5))
-
-            prediction = model.predict([img_input, dummy_tabular])
-            predicted_class = label_encoder.inverse_transform([np.argmax(prediction)])[0]
-            confidence = np.max(prediction) * 100
-
-        st.success(f"🌍 **Predicted Soil Type:** `{predicted_class}`")
-        st.info(f"🔍 Confidence: **{confidence:.2f}%**")
-        st.write(f"📌 Country: **{country}**")
-        if elevation is not None:
-            st.write(f"📌 Elevation: **{elevation} meters**")
-
-        # -------------------- OPENAI RECOMMENDATION --------------------
-        with st.spinner("Asking AI for crop recommendations..."):
-            prompt = (
-                f"You are an agricultural expert. Based on the following details:\n"
-                f"- Country: {country}\n"
-                f"- Elevation: {elevation} meters\n"
-                f"- Soil Type: {predicted_class}\n\n"
-                f"Suggest the most suitable crops to grow in this location. "
-                f"List them in bullet points with short reasons."
-            )
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a helpful agricultural assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.5,
-                max_tokens=300
-            )
-
-            ai_recommendations = response.choices[0].message.content
-
-        st.markdown("🌾 **AI Recommended Crops:**")
-        st.markdown(ai_recommendations)
 
 
 
